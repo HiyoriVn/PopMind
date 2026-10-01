@@ -75,34 +75,6 @@ private fun OptionCard(title: String, subtitle: String, checked: Boolean, onChec
 }
 
 @Composable
-fun ProgressScreen() {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
-        PageHeading("Tiến độ", "Mỗi ngày một chút, bạn đang làm rất tốt.")
-        Spacer(Modifier.height(22.dp))
-        Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)) {
-            Column(Modifier.fillMaxWidth().padding(22.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.LocalFireDepartment, null, tint = Orange, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(8.dp)); Text("Chuỗi tập trung", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = .8f), style = MaterialTheme.typography.titleMedium) }
-                Spacer(Modifier.height(6.dp)); Text("5 ngày liên tiếp", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-                Spacer(Modifier.height(18.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { listOf("T2", "T3", "T4", "T5", "T6", "T7", "CN").forEachIndexed { i, day -> DayDot(day, i < 5) } }
-            }
-        }
-        Spacer(Modifier.height(18.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Tổng thời gian", "3g 20p", Modifier.weight(1f))
-            StatCard("Phiên hoàn thành", "12 phiên", Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(25.dp)); Text("Huy hiệu của bạn", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            BadgeCard("Khởi đầu", "Phiên đầu tiên", "🌱", Modifier.weight(1f))
-            BadgeCard("Bền bỉ", "3 ngày liên tiếp", "🔥", Modifier.weight(1f))
-            BadgeCard("Tập trung", "10 phiên học", "⭐", Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
 fun RoadmapScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
         PageHeading("Lộ trình", "Sống chậm, sống sâu — theo nhịp của bạn.")
@@ -124,7 +96,8 @@ fun RoadmapScreen() {
 }
 
 @Composable
-fun ProfileScreen() {
+fun ProfileScreen(onLoadSample: () -> Unit, onDeleteAll: () -> Unit) {
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
         PageHeading("Hồ sơ", "Góc nhỏ ghi lại hành trình của bạn.")
         Spacer(Modifier.height(24.dp))
@@ -144,6 +117,34 @@ fun ProfileScreen() {
                 Column { Text("Gói Plus", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium); Text("Góc giới thiệu tính năng sẽ sớm có mặt.", style = MaterialTheme.typography.bodySmall) }
             }
         }
+        Spacer(Modifier.height(22.dp))
+        Card(shape = RoundedCornerShape(22.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                Text("Dữ liệu demo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text("Dùng để xem thử màn Tiến độ với dữ liệu 7 ngày gần nhất.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onLoadSample, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                    Text("Nạp dữ liệu mẫu 7 ngày")
+                }
+                TextButton(onClick = { showDeleteConfirmation = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Xóa dữ liệu", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Xóa toàn bộ dữ liệu?") },
+            text = { Text("Các phiên tập trung và dữ liệu demo sẽ bị xóa khỏi thiết bị.") },
+            confirmButton = {
+                TextButton(onClick = { showDeleteConfirmation = false; onDeleteAll() }) {
+                    Text("Xóa", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirmation = false }) { Text("Hủy") } }
+        )
     }
 }
 

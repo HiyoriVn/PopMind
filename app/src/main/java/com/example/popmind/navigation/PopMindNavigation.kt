@@ -36,6 +36,7 @@ import com.example.popmind.ui.screens.ProgressScreen
 import com.example.popmind.ui.screens.RoadmapScreen
 import com.example.popmind.ui.screens.SessionScreen
 import com.example.popmind.ui.screens.SessionSummaryScreen
+import com.example.popmind.ui.progress.ProgressViewModel
 
 private data class Tab(val route: String, val title: String, val icon: ImageVector)
 private data class SessionConfig(val task: String, val pomodoro: Boolean, val music: Boolean)
@@ -48,7 +49,7 @@ private val tabs = listOf(
 )
 
 @Composable
-fun PopMindNavigation() {
+fun PopMindNavigation(progressViewModel: ProgressViewModel) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val backStack = navController.currentBackStackEntryAsState()
@@ -160,16 +161,26 @@ fun PopMindNavigation() {
     ) { padding ->
         NavHost(navController, startDestination = "focus", modifier = androidx.compose.ui.Modifier.padding(padding)) {
             composable("focus") { FocusScreen(::requestToStart) }
-            composable("progress") { ProgressScreen() }
+            composable("progress") { ProgressScreen(progressViewModel) }
             composable("roadmap") { RoadmapScreen() }
-            composable("profile") { ProfileScreen() }
+            composable("profile") {
+                ProfileScreen(
+                    onLoadSample = progressViewModel::loadDemoWeek,
+                    onDeleteAll = { progressViewModel.deleteAll() }
+                )
+            }
             composable("session") {
-                SessionScreen { duration, interruptions ->
-                    navController.navigate("summary/$duration/$interruptions") {
-                        popUpTo("session") { inclusive = true }
-                        launchSingleTop = true
+                SessionScreen(
+                    onFinished = { duration, interruptions ->
+                        navController.navigate("summary/$duration/$interruptions") {
+                            popUpTo("session") { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                    onAbandoned = {
+                        navController.popBackStack("focus", inclusive = false)
                     }
-                }
+                )
             }
             composable("summary/{duration}/{interruptions}") { entry ->
                 val duration = entry.arguments?.getString("duration")?.toLongOrNull() ?: 0L

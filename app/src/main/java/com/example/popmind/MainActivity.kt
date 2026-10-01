@@ -4,16 +4,23 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.ViewModelProvider
+import com.example.popmind.data.SessionRepository
+import com.example.popmind.data.local.PopMindDatabase
 import com.example.popmind.navigation.PopMindNavigation
+import com.example.popmind.ui.progress.ProgressViewModel
+import com.example.popmind.ui.progress.ProgressViewModelFactory
 import com.example.popmind.ui.theme.PopMindTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val repository = SessionRepository(PopMindDatabase.getInstance(applicationContext))
+        val progressViewModel = ViewModelProvider(this, ProgressViewModelFactory(repository))[ProgressViewModel::class.java]
         setContent {
             PopMindTheme {
-                PopMindNavigation()
+                PopMindNavigation(progressViewModel)
             }
         }
     }

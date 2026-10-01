@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.MusicOff
 import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,7 +30,7 @@ import com.example.popmind.ui.theme.OrangePale
 import com.example.popmind.ui.theme.TealPale
 
 @Composable
-fun SessionScreen(onFinished: (Long, Int) -> Unit) {
+fun SessionScreen(onFinished: (Long, Int) -> Unit, onAbandoned: () -> Unit) {
     val context = LocalContext.current
     var task by remember { mutableStateOf("Đang chuẩn bị phiên…") }
     var phase by remember { mutableStateOf(FocusSessionService.PHASE_FOCUS) }
@@ -53,16 +54,22 @@ fun SessionScreen(onFinished: (Long, Int) -> Unit) {
                         intent.getLongExtra(FocusSessionService.EXTRA_ELAPSED, 0L),
                         intent.getIntExtra(FocusSessionService.EXTRA_INTERRUPTS, 0)
                     )
+                    FocusSessionService.ACTION_CANCELLED -> onAbandoned()
                 }
             }
         }
         val filter = IntentFilter().apply {
             addAction(FocusSessionService.ACTION_UPDATE)
             addAction(FocusSessionService.ACTION_ENDED)
+            addAction(FocusSessionService.ACTION_CANCELLED)
         }
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         context.startService(Intent(context, FocusSessionService::class.java).setAction(FocusSessionService.ACTION_REFRESH))
         onDispose { context.unregisterReceiver(receiver) }
+    }
+
+    BackHandler {
+        context.startService(Intent(context, FocusSessionService::class.java).setAction(FocusSessionService.ACTION_ABANDON))
     }
 
     Column(

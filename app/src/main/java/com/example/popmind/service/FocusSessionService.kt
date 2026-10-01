@@ -15,8 +15,15 @@ import android.os.Looper
 import android.os.PowerManager
 import android.app.NotificationManager as AndroidNotificationManager
 import androidx.core.app.NotificationCompat
+import com.example.popmind.data.local.PopMindDatabase
+import com.example.popmind.data.local.SessionEntity
 import com.example.popmind.MainActivity
 import com.example.popmind.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class FocusSessionService : Service() {
     private val handler = Handler(Looper.getMainLooper())
@@ -24,6 +31,8 @@ class FocusSessionService : Service() {
     private var player: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastNotificationMinute = -1L
+    private val databaseScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var sessionWriteJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -33,7 +42,8 @@ class FocusSessionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_END -> finishSession()
+            ACTION_END -> finishSession(completed = true)
+            ACTION_ABANDON -> finishSession(completed = false)
             ACTION_INTERRUPT -> {
                 val count = prefs.getInt(KEY_INTERRUPTS, 0) + 1
                 prefs.edit().putInt(KEY_INTERRUPTS, count).apply()
@@ -71,7 +81,22 @@ class FocusSessionService : Service() {
             .putLong(KEY_SEGMENT_START, now)
             .putLong(KEY_STARTED_AT, now)
             .putInt(KEY_INTERRUPTS, 0)
+            .putLong(KEY_SESSION_ID, -1L)
             .apply()
+
+        val session = SessionEntity(
+            startTime = now,
+            durationSeconds = 0L,
+            task = intent.getStringExtra(EXTRA_TASK).orEmpty().ifBlank { "Phiên tập trung" },
+            interruptions = 0,
+            usedPomodoro = intent.getBooleanExtra(EXTRA_POMODORO, true),
+            completed = false
+        )
+        // Tạo bản ghi ngay để phiên vẫn được giữ lại nếu app bị đóng đột ngột.
+        sessionWriteJob = databaseScope.launch {
+            val id = PopMindDatabase.getInstance(applicationContext).sessionDao().insertSession(session)
+            prefs.edit().putLong(KEY_SESSION_ID, id).apply()
+        }
 
         if (intent.getBooleanExtra(EXTRA_TRY_DND, true)) enableDnd()
         acquireWakeLock()
@@ -163,21 +188,21 @@ class FocusSessionService : Service() {
         player = null
     }
 
-    private fun finishSession() {
+    private fun finishSession(completed: Boolean) {
         if (!prefs.getBoolean(KEY_ACTIVE, false)) return
         val now = System.currentTimeMillis()
         val elapsed = ((now - prefs.getLong(KEY_STARTED_AT, now)) / 1000L).coerceAtLeast(0L)
-        val result = Intent(ACTION_ENDED).setPackage(packageName)
-            .putExtra(EXTRA_ELAPSED, elapsed)
-            .putExtra(EXTRA_INTERRUPTS, prefs.getInt(KEY_INTERRUPTS, 0))
-        sendBroadcast(result)
-
-        if (prefs.getBoolean(KEY_CHANGED_DND, false)) {
-            val manager = getSystemService(AndroidNotificationManager::class.java)
-            if (manager.isNotificationPolicyAccessGranted) {
-                manager.setInterruptionFilter(prefs.getInt(KEY_OLD_FILTER, AndroidNotificationManager.INTERRUPTION_FILTER_ALL))
-            }
+        val interruptions = prefs.getInt(KEY_INTERRUPTS, 0)
+        persistSessionResult(elapsed, interruptions, completed)
+        if (completed) {
+            sendBroadcast(Intent(ACTION_ENDED).setPackage(packageName)
+                .putExtra(EXTRA_ELAPSED, elapsed)
+                .putExtra(EXTRA_INTERRUPTS, interruptions))
+        } else {
+            sendBroadcast(Intent(ACTION_CANCELLED).setPackage(packageName))
         }
+
+        restoreDnd()
         prefs.edit().putBoolean(KEY_ACTIVE, false).putBoolean(KEY_CHANGED_DND, false).apply()
         stopMusic()
         handler.removeCallbacks(ticker)
@@ -185,6 +210,32 @@ class FocusSessionService : Service() {
         wakeLock = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun persistSessionResult(durationSeconds: Long, interruptions: Int, completed: Boolean) {
+        val previousWrite = sessionWriteJob
+        sessionWriteJob = databaseScope.launch {
+            previousWrite?.join()
+            val id = prefs.getLong(KEY_SESSION_ID, -1L)
+            if (id > 0L) {
+                PopMindDatabase.getInstance(applicationContext).sessionDao()
+                    .updateSessionResult(id, durationSeconds, interruptions, completed)
+            }
+        }
+    }
+
+    private fun restoreDnd() {
+        if (prefs.getBoolean(KEY_CHANGED_DND, false)) {
+            val manager = getSystemService(AndroidNotificationManager::class.java)
+            if (manager.isNotificationPolicyAccessGranted) {
+                manager.setInterruptionFilter(prefs.getInt(KEY_OLD_FILTER, AndroidNotificationManager.INTERRUPTION_FILTER_ALL))
+            }
+        }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        finishSession(completed = false)
+        super.onTaskRemoved(rootIntent)
     }
 
     private fun acquireWakeLock() {
@@ -243,6 +294,12 @@ class FocusSessionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        if (prefs.getBoolean(KEY_ACTIVE, false)) {
+            val elapsed = ((System.currentTimeMillis() - prefs.getLong(KEY_STARTED_AT, System.currentTimeMillis())) / 1000L).coerceAtLeast(0L)
+            persistSessionResult(elapsed, prefs.getInt(KEY_INTERRUPTS, 0), completed = false)
+            restoreDnd()
+            prefs.edit().putBoolean(KEY_ACTIVE, false).putBoolean(KEY_CHANGED_DND, false).apply()
+        }
         handler.removeCallbacks(ticker)
         stopMusic()
         wakeLock?.let { if (it.isHeld) it.release() }
@@ -252,11 +309,13 @@ class FocusSessionService : Service() {
     companion object {
         const val ACTION_START = "com.example.popmind.session.START"
         const val ACTION_END = "com.example.popmind.session.END"
+        const val ACTION_ABANDON = "com.example.popmind.session.ABANDON"
         const val ACTION_INTERRUPT = "com.example.popmind.session.INTERRUPT"
         const val ACTION_TOGGLE_MUSIC = "com.example.popmind.session.TOGGLE_MUSIC"
         const val ACTION_REFRESH = "com.example.popmind.session.REFRESH"
         const val ACTION_UPDATE = "com.example.popmind.session.UPDATE"
         const val ACTION_ENDED = "com.example.popmind.session.ENDED"
+        const val ACTION_CANCELLED = "com.example.popmind.session.CANCELLED"
         const val EXTRA_TASK = "task"
         const val EXTRA_POMODORO = "pomodoro"
         const val EXTRA_MUSIC = "music"
@@ -280,6 +339,7 @@ class FocusSessionService : Service() {
         private const val KEY_INTERRUPTS = "interruptions"
         private const val KEY_OLD_FILTER = "old_filter"
         private const val KEY_CHANGED_DND = "changed_dnd"
+        private const val KEY_SESSION_ID = "session_id"
         private const val FOCUS_MS = 25 * 60 * 1000L
         private const val BREAK_MS = 5 * 60 * 1000L
     }
