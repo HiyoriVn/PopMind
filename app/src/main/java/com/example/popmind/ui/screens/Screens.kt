@@ -9,13 +9,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.EmojiEvents
-import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.SelfImprovement
-import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,10 +26,13 @@ import com.example.popmind.ui.profile.ProfileViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.popmind.session.FocusSettings
 import com.example.popmind.session.FocusSessionState
+import com.example.popmind.data.PersonalProfile
+import java.time.LocalTime
 
 @Composable
 fun FocusScreen(
     progressState: com.example.popmind.ui.progress.ProgressUiState,
+    personalization: PersonalProfile,
     settings: FocusSettings,
     onFocusMinutes: (Int) -> Unit,
     onBreakMinutes: (Int) -> Unit,
@@ -50,6 +50,9 @@ fun FocusScreen(
             Column(Modifier.weight(1f)) {
                 Text("POP-MIND", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Spacer(Modifier.height(8.dp))
+                val hour = LocalTime.now().hour
+                val greeting = when (hour) { in 5..11 -> "Chào buổi sáng"; in 12..17 -> "Chào buổi chiều"; in 18..21 -> "Chào buổi tối"; else -> "Chào khuya" }
+                Text("$greeting, ${personalization.name.ifBlank { "bạn" }}!", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Text("Sẵn sàng ngồi\nvào bàn chưa?", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, lineHeight = 38.sp)
             }
             Box(Modifier.size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
@@ -64,6 +67,13 @@ fun FocusScreen(
         Text("Hôm nay bạn muốn làm gì?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(value = task, onValueChange = { task = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Ví dụ: Ôn Toán chương 2") }, shape = RoundedCornerShape(20.dp), singleLine = true)
+        val taskSuggestions = (progressState.recentTasks + personalization.subjects).distinct().take(8)
+        if (taskSuggestions.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp)); Text("Gợi ý của bạn", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                taskSuggestions.forEach { suggestion -> FilterChip(modifier = Modifier.height(36.dp), selected = task == suggestion, onClick = { task = suggestion }, label = { Text(suggestion) }) }
+            }
+        }
         Spacer(Modifier.height(18.dp))
         Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             Column(Modifier.fillMaxWidth().padding(18.dp)) {
@@ -133,41 +143,33 @@ private fun OptionCard(title: String, subtitle: String, checked: Boolean, onChec
 }
 
 @Composable
-fun RoadmapScreen() {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
-        PageHeading("Lộ trình", "Sống chậm, sống sâu — theo nhịp của bạn.")
-        Spacer(Modifier.height(22.dp))
-        Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-            Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp))
-                Spacer(Modifier.width(14.dp)); Column { Text("Tuần này", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Xây nhịp học nhẹ nhàng", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-        }
-        Spacer(Modifier.height(18.dp)); Text("Gợi ý dành cho bạn", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        SuggestionCard("01", "Bắt đầu từ 25 phút", "Chọn một việc nhỏ và dành trọn một phiên cho nó.", "Thử ngay hôm nay", Icons.Rounded.Lightbulb)
-        Spacer(Modifier.height(12.dp))
-        SuggestionCard("02", "Nghỉ ngắn, nghỉ thật", "Rời màn hình, vươn vai hoặc uống một cốc nước.", "Sau phiên tập trung", Icons.Rounded.SelfImprovement)
-        Spacer(Modifier.height(12.dp))
-        SuggestionCard("03", "Để điện thoại xa tầm tay", "Tạo một khoảng yên tĩnh để đầu óc dễ vào guồng.", "Mẹo nhỏ", Icons.Rounded.Star)
-    }
-}
-
-@Composable
 fun ProfileScreen(
     profileViewModel: ProfileViewModel,
     progressState: com.example.popmind.ui.progress.ProgressUiState,
+    personalization: PersonalProfile,
+    favoriteAppLabels: List<String>,
     onLoadSample: () -> Unit,
     onDeleteAll: () -> Unit,
     onOpenAssessment: () -> Unit,
     onRequestUsageAccess: () -> Unit,
-    onOpenPlus: () -> Unit
+    onOpenPlus: () -> Unit,
+    onEditPersonalization: () -> Unit
 ) {
     val profileState by profileViewModel.state.collectAsStateWithLifecycle()
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
         PageHeading("Hồ sơ", "Góc nhỏ ghi lại hành trình của bạn.")
         Spacer(Modifier.height(24.dp))
+        Card(shape = RoundedCornerShape(26.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                Text("${personalization.name.ifBlank { "Bạn" }} · Lớp ${personalization.grade}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Mình đang hướng tới: ${personalization.subjects.joinToString().ifBlank { "chưa chọn môn học" }}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Khung giờ cần để ý: ${personalization.distractionWindow}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (favoriteAppLabels.isNotEmpty()) Text("Ứng dụng bạn đã chọn: ${favoriteAppLabels.joinToString()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onEditPersonalization) { Text("Sửa thông tin và mục tiêu") }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
         UsageStatsCard(profileState.usage, onRequestUsageAccess, profileViewModel::refreshUsage)
         Spacer(Modifier.height(14.dp))
         AssessmentProfileCard(profileState, onOpenAssessment)
@@ -241,18 +243,4 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 @Composable
 private fun BadgeCard(title: String, subtitle: String, emoji: String, modifier: Modifier = Modifier) {
     Card(modifier, shape = RoundedCornerShape(20.dp)) { Column(Modifier.fillMaxWidth().padding(vertical = 15.dp, horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(emoji, fontSize = 27.sp); Spacer(Modifier.height(7.dp)); Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge); Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-}
-
-@Composable
-private fun SuggestionCard(number: String, title: String, body: String, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Card(shape = RoundedCornerShape(22.dp)) {
-        Column(Modifier.fillMaxWidth().padding(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) { Icon(icon, null, tint = MaterialTheme.colorScheme.secondary) }
-                Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text("GỢI Ý $number", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold); Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-            }
-            Spacer(Modifier.height(12.dp)); Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp)); Text("•  $tag", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        }
-    }
 }

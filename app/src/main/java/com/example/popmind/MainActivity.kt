@@ -15,6 +15,7 @@ import com.example.popmind.ui.profile.ProfileViewModel
 import com.example.popmind.ui.roadmap.RoadmapViewModel
 import com.example.popmind.session.FocusSessionRepository
 import com.example.popmind.session.FocusSettingsViewModel
+import com.example.popmind.ui.profile.PersonalizationViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,10 +26,11 @@ class MainActivity : ComponentActivity() {
         val profileViewModel = ViewModelProvider(this)[ProfileViewModel::class.java]
         val roadmapViewModel = ViewModelProvider(this)[RoadmapViewModel::class.java]
         val focusSettingsViewModel = ViewModelProvider(this)[FocusSettingsViewModel::class.java]
+        val personalizationViewModel = ViewModelProvider(this)[PersonalizationViewModel::class.java]
         FocusSessionRepository.initialize(applicationContext)
         setContent {
             PopMindTheme {
-                PopMindNavigation(progressViewModel, profileViewModel, roadmapViewModel, focusSettingsViewModel)
+                PopMindNavigation(progressViewModel, profileViewModel, roadmapViewModel, focusSettingsViewModel, personalizationViewModel)
             }
         }
     }

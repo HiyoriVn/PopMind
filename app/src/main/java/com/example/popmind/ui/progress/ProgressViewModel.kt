@@ -26,7 +26,10 @@ data class ProgressUiState(
     val completedCount: Int = 0,
     val lastSevenDays: List<DailyProgress> = emptyList(),
     val challengeDays: List<Boolean> = emptyList(),
-    val badges: List<ProgressBadge> = emptyList()
+    val badges: List<ProgressBadge> = emptyList(),
+    val recentTasks: List<String> = emptyList(),
+    val favoriteFocusMinutes: Int = 25,
+    val recentCompletedInterruptions: List<Int> = emptyList()
 )
 
 class ProgressViewModel(private val repository: SessionRepository) : ViewModel() {
@@ -65,6 +68,11 @@ class ProgressViewModel(private val repository: SessionRepository) : ViewModel()
         val completedCount = sessions.count { it.completed }
         val uninterrupted = sessions.any { it.completed && it.interruptions == 0 }
         val average = if (sessions.isEmpty()) 0.0 else sessions.map { it.interruptions }.average()
+        val recentCompleted = sessions.filter { it.completed }.sortedByDescending { it.startTime }
+        val popularDuration = recentCompleted.groupingBy { (it.durationSeconds / 60L).toInt() }
+            .eachCount().entries.sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }
+                .thenByDescending { duration -> recentCompleted.firstOrNull { (it.durationSeconds / 60L).toInt() == duration.key }?.startTime ?: 0L })
+            .firstOrNull()?.key?.coerceIn(5, 120) ?: 25
         return ProgressUiState(
             streakDays = streak,
             todayMinutes = sevenDays.last().minutes,
@@ -73,6 +81,9 @@ class ProgressViewModel(private val repository: SessionRepository) : ViewModel()
             completedCount = completedCount,
             lastSevenDays = sevenDays,
             challengeDays = challenge,
+            recentTasks = sessions.sortedByDescending { it.startTime }.map { it.task.trim() }.filter(String::isNotBlank).distinct().take(5),
+            favoriteFocusMinutes = popularDuration,
+            recentCompletedInterruptions = recentCompleted.take(3).map { it.interruptions },
             badges = listOf(
                 ProgressBadge("Phiên đầu tiên", "Hoàn thành phiên đầu", "🌱", completedCount >= 1),
                 ProgressBadge("Bền bỉ", "3 ngày liên tiếp", "🔥", streak >= 3),

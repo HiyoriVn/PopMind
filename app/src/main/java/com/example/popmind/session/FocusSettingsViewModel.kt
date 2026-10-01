@@ -29,6 +29,13 @@ class FocusSettingsViewModel(application: Application) : AndroidViewModel(applic
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FocusSettings())
 
     fun saveFocus(minutes: Int) = update { it[focusKey] = minutes.coerceIn(5, 120) }
+    fun applyHistoricalDefault(minutes: Int) {
+        viewModelScope.launch {
+            getApplication<Application>().focusSettingsStore.edit { prefs ->
+                if (prefs[focusKey] == null) prefs[focusKey] = minutes.coerceIn(5, 120)
+            }
+        }
+    }
     fun saveBreak(minutes: Int) = update { it[breakKey] = minutes.coerceIn(5, 10) }
     fun saveSound(sound: String) = update { it[soundKey] = sound }
     fun saveVolume(volume: Float) = update { it[volumeKey] = volume.coerceIn(0f, 1f) }

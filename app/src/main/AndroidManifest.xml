@@ -54,6 +54,7 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Đồng hồ phiên tập trung do người dùng khởi chạy và nhạc nền tùy chọn" />
         </service>
+        <receiver android:name=".reminder.FocusReminderReceiver" android:exported="false" />
     </application>
 
 </manifest>

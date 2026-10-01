@@ -21,7 +21,28 @@ fun PersonalizedRoadmapScreen(viewModel: RoadmapViewModel, onOpenUsageSettings: 
     var balance by remember { mutableStateOf(DayBalance()) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
         Text("Lộ trình", style = MaterialTheme.typography.headlineLarge)
-        Text("Sống chậm, sống sâu — theo nhịp của bạn.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${state.profile.name.ifBlank { "Bạn" }} · lớp ${state.profile.grade} — sống chậm, sống sâu theo nhịp của mình.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            InsightCard("Giờ vàng", state.goldenHour, "Phiên hoàn thành nhiều nhất", Modifier.weight(1f))
+            InsightCard("Giờ dễ xao nhãng", state.distractionHour, "Nội dung ngắn trong 7 ngày", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Card(shape = RoundedCornerShape(26.dp)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("Nhịp phiên gợi ý · ${state.recommendedMinutes} phút", style = MaterialTheme.typography.titleMedium)
+                Text(state.adjustmentReason, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Card(shape = RoundedCornerShape(26.dp)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("Nhìn lại tuần này", style = MaterialTheme.typography.titleMedium)
+                Text("Thời gian tập trung: ${signed(state.focusWeekChangeMinutes)} phút so với tuần trước", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (state.usage.hasAccess) "Nội dung ngắn: ${formatHourChange(state.shortWeekChangeMillis)} so với tuần trước" else "Bật quyền Thời gian sử dụng để so sánh nội dung ngắn.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Gián đoạn trung bình: ${signedDecimal(state.interruptionWeekChange)} lần/phiên", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         Spacer(Modifier.height(18.dp))
         Text("Mục tiêu tuần này", style = MaterialTheme.typography.titleLarge)
         if (state.goals.isEmpty()) {
@@ -43,6 +64,25 @@ fun PersonalizedRoadmapScreen(viewModel: RoadmapViewModel, onOpenUsageSettings: 
             }
         }
     }
+}
+
+@Composable
+private fun InsightCard(title: String, value: String, detail: String, modifier: Modifier = Modifier) {
+    Card(modifier, shape = RoundedCornerShape(26.dp)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(5.dp)); Text(value, style = MaterialTheme.typography.titleMedium)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private fun signed(value: Int) = (if (value > 0) "+" else "") + value
+private fun signedDecimal(value: Double) = (if (value > 0) "+" else "") + "%.1f".format(java.util.Locale.getDefault(), value)
+private fun formatHourChange(millis: Long): String {
+    val minutes = kotlin.math.abs(millis) / 60_000
+    val formatted = if (minutes >= 60) "${minutes / 60} giờ ${minutes % 60} phút" else "$minutes phút"
+    return (if (millis > 0) "+" else if (millis < 0) "−" else "") + formatted
 }
 
 @Composable

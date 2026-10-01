@@ -14,6 +14,9 @@ interface RoadmapGoalDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(goals: List<RoadmapGoalEntity>)
 
+    @Query("DELETE FROM roadmap_goals WHERE weekStart = :weekStart")
+    suspend fun deleteWeek(weekStart: Long)
+
     @Query("UPDATE roadmap_goals SET completed = :completed WHERE id = :id")
     suspend fun setCompleted(id: String, completed: Boolean)
 }
