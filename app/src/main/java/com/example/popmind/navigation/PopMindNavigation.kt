@@ -37,6 +37,12 @@ import com.example.popmind.ui.screens.RoadmapScreen
 import com.example.popmind.ui.screens.SessionScreen
 import com.example.popmind.ui.screens.SessionSummaryScreen
 import com.example.popmind.ui.progress.ProgressViewModel
+import com.example.popmind.ui.profile.ProfileViewModel
+import com.example.popmind.ui.screens.AssessmentScreen
+import com.example.popmind.ui.roadmap.RoadmapViewModel
+import com.example.popmind.ui.screens.PersonalizedRoadmapScreen
+import com.example.popmind.ui.screens.PlusScreen
+import com.example.popmind.ui.screens.WelcomeScreen
 
 private data class Tab(val route: String, val title: String, val icon: ImageVector)
 private data class SessionConfig(val task: String, val pomodoro: Boolean, val music: Boolean)
@@ -49,10 +55,11 @@ private val tabs = listOf(
 )
 
 @Composable
-fun PopMindNavigation(progressViewModel: ProgressViewModel) {
+fun PopMindNavigation(progressViewModel: ProgressViewModel, profileViewModel: ProfileViewModel, roadmapViewModel: RoadmapViewModel) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val backStack = navController.currentBackStackEntryAsState()
+    val welcomeDone = remember { context.getSharedPreferences("pop_mind", android.content.Context.MODE_PRIVATE).getBoolean("welcome_done", false) }
     var pendingSession by remember { mutableStateOf<SessionConfig?>(null) }
     var showDndDialog by remember { mutableStateOf(false) }
     var showNotificationDialog by remember { mutableStateOf(false) }
@@ -79,6 +86,10 @@ fun PopMindNavigation(progressViewModel: ProgressViewModel) {
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         // Từ chối thông báo không ngăn phiên tập trung chạy.
         showDndDialog = true
+    }
+    val usageAccessSettings = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        profileViewModel.refreshUsage()
+        roadmapViewModel.refreshUsage()
     }
 
     fun requestToStart(task: String, pomodoro: Boolean, music: Boolean) {
@@ -159,16 +170,34 @@ fun PopMindNavigation(progressViewModel: ProgressViewModel) {
             }
         }
     ) { padding ->
-        NavHost(navController, startDestination = "focus", modifier = androidx.compose.ui.Modifier.padding(padding)) {
+        NavHost(navController, startDestination = if (welcomeDone) "focus" else "welcome", modifier = androidx.compose.ui.Modifier.padding(padding)) {
+            composable("welcome") { WelcomeScreen {
+                context.getSharedPreferences("pop_mind", android.content.Context.MODE_PRIVATE).edit().putBoolean("welcome_done", true).apply()
+                navController.navigate("focus") { popUpTo("welcome") { inclusive = true } }
+            } }
             composable("focus") { FocusScreen(::requestToStart) }
             composable("progress") { ProgressScreen(progressViewModel) }
-            composable("roadmap") { RoadmapScreen() }
-            composable("profile") {
-                ProfileScreen(
-                    onLoadSample = progressViewModel::loadDemoWeek,
-                    onDeleteAll = { progressViewModel.deleteAll() }
+            composable("roadmap") {
+                PersonalizedRoadmapScreen(
+                    roadmapViewModel,
+                    onOpenUsageSettings = { usageAccessSettings.launch(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
+                    onOpenPlus = { navController.navigate("plus") }
                 )
             }
+            composable("profile") {
+                ProfileScreen(
+                    profileViewModel = profileViewModel,
+                    onLoadSample = progressViewModel::loadDemoWeek,
+                    onDeleteAll = { progressViewModel.deleteAll() },
+                    onOpenAssessment = { navController.navigate("assessment") },
+                    onRequestUsageAccess = { usageAccessSettings.launch(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
+                    onOpenPlus = { navController.navigate("plus") }
+                )
+            }
+            composable("assessment") {
+                AssessmentScreen(profileViewModel, onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() })
+            }
+            composable("plus") { PlusScreen(onBack = { navController.popBackStack() }) }
             composable("session") {
                 SessionScreen(
                     onFinished = { duration, interruptions ->

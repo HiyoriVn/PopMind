@@ -1,6 +1,7 @@
 package com.example.popmind.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +26,8 @@ import androidx.compose.ui.unit.sp
 import com.example.popmind.ui.theme.Orange
 import com.example.popmind.ui.theme.OrangePale
 import com.example.popmind.ui.theme.TealPale
+import com.example.popmind.ui.profile.ProfileViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun FocusScreen(onStartSession: (String, Boolean, Boolean) -> Unit) {
@@ -96,11 +99,23 @@ fun RoadmapScreen() {
 }
 
 @Composable
-fun ProfileScreen(onLoadSample: () -> Unit, onDeleteAll: () -> Unit) {
+fun ProfileScreen(
+    profileViewModel: ProfileViewModel,
+    onLoadSample: () -> Unit,
+    onDeleteAll: () -> Unit,
+    onOpenAssessment: () -> Unit,
+    onRequestUsageAccess: () -> Unit,
+    onOpenPlus: () -> Unit
+) {
+    val profileState by profileViewModel.state.collectAsStateWithLifecycle()
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
         PageHeading("Hồ sơ", "Góc nhỏ ghi lại hành trình của bạn.")
         Spacer(Modifier.height(24.dp))
+        UsageStatsCard(profileState.usage, onRequestUsageAccess, profileViewModel::refreshUsage)
+        Spacer(Modifier.height(14.dp))
+        AssessmentProfileCard(profileState, onOpenAssessment)
+        Spacer(Modifier.height(20.dp))
         Card(shape = RoundedCornerShape(26.dp)) {
             Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(64.dp).clip(CircleShape).background(TealPale), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Person, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp)) }
@@ -111,9 +126,9 @@ fun ProfileScreen(onLoadSample: () -> Unit, onDeleteAll: () -> Unit) {
         Spacer(Modifier.height(12.dp)); StatCard("Mục tiêu tuần", "5 / 7 phiên", Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp)); StatCard("Thời gian tập trung", "3 giờ 20 phút", Modifier.fillMaxWidth())
         Spacer(Modifier.height(24.dp))
-        Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = OrangePale)) {
+        Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenPlus), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
             Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.EmojiEvents, null, tint = Orange, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(12.dp))
+                Icon(Icons.Rounded.EmojiEvents, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(12.dp))
                 Column { Text("Gói Plus", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium); Text("Góc giới thiệu tính năng sẽ sớm có mặt.", style = MaterialTheme.typography.bodySmall) }
             }
         }
