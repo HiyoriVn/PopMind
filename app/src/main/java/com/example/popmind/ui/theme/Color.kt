@@ -2,10 +2,13 @@ package com.example.popmind.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Teal = Color(0xFF087F78)
-val TealLight = Color(0xFF64C7BB)
-val TealPale = Color(0xFFE0F3EF)
-val Orange = Color(0xFFFF9B54)
-val OrangePale = Color(0xFFFFE9D8)
-val Ink = Color(0xFF183B39)
-val Night = Color(0xFF102523)
+val Teal = Color(0xFF0D9488)
+val Mint = Color(0xFFCCFBF1)
+val TealLight = Color(0xFF2DD4BF)
+val TealPale = Mint
+val Orange = Color(0xFFF97316)
+val OrangePale = Color(0xFFFFEDD5)
+val Ink = Color(0xFF0F172A)
+val Night = Color(0xFF0F172A)
+val DarkCard = Color(0xFF1E293B)
+val Slate = Color(0xFF475569)

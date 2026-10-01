@@ -20,11 +20,13 @@ import androidx.compose.ui.unit.sp
 import com.example.popmind.ui.progress.ProgressBadge
 import com.example.popmind.ui.progress.ProgressViewModel
 import com.example.popmind.ui.progress.shortDayLabel
+import com.example.popmind.ui.profile.ProfileViewModel
 import java.util.Locale
 
 @Composable
-fun ProgressScreen(viewModel: ProgressViewModel) {
+fun ProgressScreen(viewModel: ProgressViewModel, profileViewModel: ProfileViewModel, onRequestUsageAccess: () -> Unit) {
     val state by viewModel.state.collectAsState()
+    val profileState by profileViewModel.state.collectAsState()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
         Text("Tiến độ", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(6.dp))
@@ -40,6 +42,8 @@ fun ProgressScreen(viewModel: ProgressViewModel) {
                 }
             }
         }
+        Spacer(Modifier.height(14.dp))
+        UsageStatsCard(profileState.usage, onRequestUsageAccess, profileViewModel::refreshUsage)
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ProgressStat("Hôm nay", "${state.todayMinutes} phút", Modifier.weight(1f))

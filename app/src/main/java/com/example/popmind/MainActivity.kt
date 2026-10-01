@@ -13,6 +13,8 @@ import com.example.popmind.ui.progress.ProgressViewModelFactory
 import com.example.popmind.ui.theme.PopMindTheme
 import com.example.popmind.ui.profile.ProfileViewModel
 import com.example.popmind.ui.roadmap.RoadmapViewModel
+import com.example.popmind.session.FocusSessionRepository
+import com.example.popmind.session.FocusSettingsViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,10 +24,18 @@ class MainActivity : ComponentActivity() {
         val progressViewModel = ViewModelProvider(this, ProgressViewModelFactory(repository))[ProgressViewModel::class.java]
         val profileViewModel = ViewModelProvider(this)[ProfileViewModel::class.java]
         val roadmapViewModel = ViewModelProvider(this)[RoadmapViewModel::class.java]
+        val focusSettingsViewModel = ViewModelProvider(this)[FocusSettingsViewModel::class.java]
+        FocusSessionRepository.initialize(applicationContext)
         setContent {
             PopMindTheme {
-                PopMindNavigation(progressViewModel, profileViewModel, roadmapViewModel)
+                PopMindNavigation(progressViewModel, profileViewModel, roadmapViewModel, focusSettingsViewModel)
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == com.example.popmind.service.FocusSessionService.ACTION_OPEN_SESSION) FocusSessionRepository.requestOpenSession()
     }
 }

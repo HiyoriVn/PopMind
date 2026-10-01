@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -24,16 +25,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.popmind.ui.theme.Orange
-import com.example.popmind.ui.theme.OrangePale
-import com.example.popmind.ui.theme.TealPale
 import com.example.popmind.ui.profile.ProfileViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.popmind.session.FocusSettings
+import com.example.popmind.session.FocusSessionState
 
 @Composable
-fun FocusScreen(onStartSession: (String, Boolean, Boolean) -> Unit) {
+fun FocusScreen(
+    progressState: com.example.popmind.ui.progress.ProgressUiState,
+    settings: FocusSettings,
+    onFocusMinutes: (Int) -> Unit,
+    onBreakMinutes: (Int) -> Unit,
+    onSound: (String) -> Unit,
+    onVolume: (Float) -> Unit,
+    onStartSession: (String, Boolean, Int, Int, String, Float) -> Unit,
+    onOpenBreathing: () -> Unit
+) {
     var task by remember { mutableStateOf("") }
     var pomodoro by remember { mutableStateOf(true) }
-    var music by remember { mutableStateOf(false) }
+    var customDialog by remember { mutableStateOf(false) }
+    var customMinutes by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -41,35 +52,79 @@ fun FocusScreen(onStartSession: (String, Boolean, Boolean) -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Text("Sẵn sàng ngồi\nvào bàn chưa?", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, lineHeight = 38.sp)
             }
-            Box(Modifier.size(76.dp).clip(CircleShape).background(OrangePale), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.SelfImprovement, null, tint = Orange, modifier = Modifier.size(42.dp))
             }
         }
         Spacer(Modifier.height(12.dp))
         Text("Dành một chút thời gian cho điều quan trọng nhé.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(12.dp))
+        AssistChip(onClick = {}, modifier = Modifier.height(36.dp), label = { Text("🔥 ${progressState.streakDays} ngày giữ nhịp") }, leadingIcon = { Icon(Icons.Rounded.LocalFireDepartment, null) })
         Spacer(Modifier.height(28.dp))
         Text("Hôm nay bạn muốn làm gì?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(value = task, onValueChange = { task = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Ví dụ: Ôn Toán chương 2") }, shape = RoundedCornerShape(20.dp), singleLine = true)
         Spacer(Modifier.height(18.dp))
-        OptionCard(title = "Pomodoro 25/5", subtitle = "Tập trung 25 phút, nghỉ 5 phút", checked = pomodoro, onCheckedChange = { pomodoro = it }, icon = "⏱️")
+        Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+                Text("${settings.focusMinutes}:00", style = MaterialTheme.typography.displaySmall.copy(fontFeatureSettings = "tnum"), color = MaterialTheme.colorScheme.primary)
+                Text("Tập trung theo nhịp của bạn", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                OptionCard(title = "Pomodoro ${settings.focusMinutes}/${settings.breakMinutes}", subtitle = "Tập trung và nghỉ theo nhịp đã chọn", checked = pomodoro, onCheckedChange = { pomodoro = it }, icon = "⏱️")
+            }
+        }
         Spacer(Modifier.height(12.dp))
-        OptionCard(title = "Nhạc nền", subtitle = "Một chút âm thanh dịu nhẹ", checked = music, onCheckedChange = { music = it }, icon = "🎧")
+        Text("Thời lượng tập trung", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(15, 25, 45, 60).forEach { minutes -> FilterChip(modifier = Modifier.height(36.dp), selected = settings.focusMinutes == minutes, onClick = { onFocusMinutes(minutes) }, label = { Text("$minutes phút") }) }
+            FilterChip(modifier = Modifier.height(36.dp), selected = settings.focusMinutes !in listOf(15, 25, 45, 60), onClick = { customMinutes = settings.focusMinutes.toString(); customDialog = true }, label = { Text("Tự chọn") })
+        }
+        Text("Nghỉ", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(5, 10).forEach { minutes -> FilterChip(modifier = Modifier.height(36.dp), selected = settings.breakMinutes == minutes, onClick = { onBreakMinutes(minutes) }, label = { Text("$minutes phút") }) }
+        }
+        Spacer(Modifier.height(12.dp))
+        OptionCard(title = "Nhạc nền", subtitle = "Chọn âm thanh dịu nhẹ hoặc tắt", checked = settings.sound != FocusSessionState.SOUND_OFF, onCheckedChange = { onSound(if (it) FocusSessionState.SOUND_RAIN else FocusSessionState.SOUND_OFF) }, icon = "🎧")
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(FocusSessionState.SOUND_RAIN to "Mưa", FocusSessionState.SOUND_LOFI to "Lo-fi", FocusSessionState.SOUND_WHITE to "Ồn trắng", FocusSessionState.SOUND_OFF to "Tắt").forEach { (sound, label) ->
+                FilterChip(modifier = Modifier.height(36.dp), selected = settings.sound == sound, onClick = { onSound(sound) }, label = { Text(label) })
+            }
+        }
+        if (settings.sound != FocusSessionState.SOUND_OFF) {
+            var volume by remember(settings.volume) { mutableFloatStateOf(settings.volume) }
+            Text("Âm lượng nhạc · ${(volume * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+            Slider(value = volume, onValueChange = { volume = it }, onValueChangeFinished = { onVolume(volume) })
+        }
         Spacer(Modifier.height(24.dp))
-        Button(onClick = { onStartSession(task, pomodoro, music) }, modifier = Modifier.fillMaxWidth().height(60.dp), shape = RoundedCornerShape(20.dp)) {
+        Button(onClick = { onStartSession(task, pomodoro, settings.focusMinutes, settings.breakMinutes, settings.sound, settings.volume) }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = CircleShape) {
             Text("Bắt đầu tập trung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(8.dp)); Text("→", fontSize = 22.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onOpenBreathing, modifier = Modifier.fillMaxWidth().height(52.dp), shape = CircleShape, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)) {
+            Icon(Icons.Rounded.SelfImprovement, null); Spacer(Modifier.width(8.dp)); Text("Cứu nguy lướt video")
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatCard("Hôm nay", "${progressState.todayMinutes} phút", Modifier.weight(1f))
+            StatCard("Phiên hoàn thành", "${progressState.completedCount}", Modifier.weight(1f))
         }
         Spacer(Modifier.height(14.dp))
         Text("Chậm lại một chút, bạn sẽ đi xa hơn 🌱", modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
+    if (customDialog) AlertDialog(
+        onDismissRequest = { customDialog = false }, title = { Text("Chọn số phút tập trung") },
+        text = { Column { Text("Nhập số từ 5 đến 120 phút."); OutlinedTextField(value = customMinutes, onValueChange = { customMinutes = it.filter(Char::isDigit).take(3) }, singleLine = true, label = { Text("Phút") }) } },
+        confirmButton = { TextButton(onClick = { customMinutes.toIntOrNull()?.takeIf { it in 5..120 }?.let(onFocusMinutes); customDialog = false }) { Text("Lưu") } },
+        dismissButton = { TextButton(onClick = { customDialog = false }) { Text("Hủy") } }
+    )
 }
 
 @Composable
 private fun OptionCard(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, icon: String) {
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(TealPale), contentAlignment = Alignment.Center) { Text(icon, fontSize = 21.sp) }
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Text(icon, fontSize = 21.sp) }
             Spacer(Modifier.width(13.dp))
             Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.Bold); Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             Switch(checked = checked, onCheckedChange = onCheckedChange)
@@ -82,7 +137,7 @@ fun RoadmapScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
         PageHeading("Lộ trình", "Sống chậm, sống sâu — theo nhịp của bạn.")
         Spacer(Modifier.height(22.dp))
-        Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = TealPale)) {
+        Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp))
                 Spacer(Modifier.width(14.dp)); Column { Text("Tuần này", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Xây nhịp học nhẹ nhàng", color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -101,6 +156,7 @@ fun RoadmapScreen() {
 @Composable
 fun ProfileScreen(
     profileViewModel: ProfileViewModel,
+    progressState: com.example.popmind.ui.progress.ProgressUiState,
     onLoadSample: () -> Unit,
     onDeleteAll: () -> Unit,
     onOpenAssessment: () -> Unit,
@@ -118,18 +174,18 @@ fun ProfileScreen(
         Spacer(Modifier.height(20.dp))
         Card(shape = RoundedCornerShape(26.dp)) {
             Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(64.dp).clip(CircleShape).background(TealPale), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Person, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp)) }
-                Spacer(Modifier.width(16.dp)); Column { Text("Bạn học chăm", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("Thành viên từ hôm nay", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Box(Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Person, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp)) }
+                Spacer(Modifier.width(16.dp)); Column { Text("Hành trình của bạn", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("Một bước nhỏ mỗi ngày", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
         Spacer(Modifier.height(20.dp)); Text("Tổng quan", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp)); StatCard("Mục tiêu tuần", "5 / 7 phiên", Modifier.fillMaxWidth())
-        Spacer(Modifier.height(12.dp)); StatCard("Thời gian tập trung", "3 giờ 20 phút", Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp)); StatCard("Chuỗi ngày tập trung", "${progressState.streakDays} ngày", Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp)); StatCard("Thời gian tập trung · 7 ngày", "${progressState.weekMinutes} phút", Modifier.fillMaxWidth())
         Spacer(Modifier.height(24.dp))
         Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenPlus), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
             Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.EmojiEvents, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(12.dp))
-                Column { Text("Gói Plus", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium); Text("Góc giới thiệu tính năng sẽ sớm có mặt.", style = MaterialTheme.typography.bodySmall) }
+                Column { Text("Gói Plus", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium); Text("Bản demo · không thu phí", style = MaterialTheme.typography.bodySmall) }
             }
         }
         Spacer(Modifier.height(22.dp))
@@ -192,7 +248,7 @@ private fun SuggestionCard(number: String, title: String, body: String, tag: Str
     Card(shape = RoundedCornerShape(22.dp)) {
         Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(OrangePale), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Orange) }
+                Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) { Icon(icon, null, tint = MaterialTheme.colorScheme.secondary) }
                 Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text("GỢI Ý $number", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold); Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
             }
             Spacer(Modifier.height(12.dp)); Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)

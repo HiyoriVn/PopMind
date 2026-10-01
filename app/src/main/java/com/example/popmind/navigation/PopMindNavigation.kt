@@ -8,6 +8,9 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.AutoStories
@@ -21,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -43,9 +47,14 @@ import com.example.popmind.ui.roadmap.RoadmapViewModel
 import com.example.popmind.ui.screens.PersonalizedRoadmapScreen
 import com.example.popmind.ui.screens.PlusScreen
 import com.example.popmind.ui.screens.WelcomeScreen
+import com.example.popmind.ui.screens.BreathingScreen
+import com.example.popmind.session.FocusSessionRepository
+import com.example.popmind.session.FocusSettingsViewModel
+import com.example.popmind.ui.theme.Mint
+import kotlinx.coroutines.flow.collect
 
 private data class Tab(val route: String, val title: String, val icon: ImageVector)
-private data class SessionConfig(val task: String, val pomodoro: Boolean, val music: Boolean)
+private data class SessionConfig(val task: String, val pomodoro: Boolean, val focusMinutes: Int, val breakMinutes: Int, val sound: String, val volume: Float)
 
 private val tabs = listOf(
     Tab("focus", "Tập trung", Icons.Rounded.Bolt),
@@ -55,24 +64,53 @@ private val tabs = listOf(
 )
 
 @Composable
-fun PopMindNavigation(progressViewModel: ProgressViewModel, profileViewModel: ProfileViewModel, roadmapViewModel: RoadmapViewModel) {
+fun PopMindNavigation(progressViewModel: ProgressViewModel, profileViewModel: ProfileViewModel, roadmapViewModel: RoadmapViewModel, focusSettingsViewModel: FocusSettingsViewModel) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val backStack = navController.currentBackStackEntryAsState()
-    val welcomeDone = remember { context.getSharedPreferences("pop_mind", android.content.Context.MODE_PRIVATE).getBoolean("welcome_done", false) }
+    val sessionState by FocusSessionRepository.state.collectAsState()
+    val sessionReady by FocusSessionRepository.ready.collectAsState()
+    val focusSettings by focusSettingsViewModel.settings.collectAsState()
     var pendingSession by remember { mutableStateOf<SessionConfig?>(null) }
     var showDndDialog by remember { mutableStateOf(false) }
     var showNotificationDialog by remember { mutableStateOf(false) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pendingTryDnd by remember { mutableStateOf(false) }
 
-    fun startSession(config: SessionConfig, tryDnd: Boolean) {
+    fun launchSession(config: SessionConfig, tryDnd: Boolean, pin: Boolean) {
         val intent = Intent(context, FocusSessionService::class.java)
             .setAction(FocusSessionService.ACTION_START)
             .putExtra(FocusSessionService.EXTRA_TASK, config.task)
             .putExtra(FocusSessionService.EXTRA_POMODORO, config.pomodoro)
-            .putExtra(FocusSessionService.EXTRA_MUSIC, config.music)
+            .putExtra(FocusSessionService.EXTRA_FOCUS_MINUTES, config.focusMinutes)
+            .putExtra(FocusSessionService.EXTRA_BREAK_MINUTES, config.breakMinutes)
+            .putExtra(FocusSessionService.EXTRA_SOUND, config.sound)
+            .putExtra(FocusSessionService.EXTRA_VOLUME, config.volume)
+            .putExtra(FocusSessionService.EXTRA_PIN, pin)
             .putExtra(FocusSessionService.EXTRA_TRY_DND, tryDnd)
         ContextCompat.startForegroundService(context, intent)
         navController.navigate("session") { launchSingleTop = true }
+    }
+
+    fun startSession(config: SessionConfig, tryDnd: Boolean) {
+        pendingSession = config
+        pendingTryDnd = tryDnd
+        showPinDialog = true
+    }
+
+    LaunchedEffect(sessionReady) {
+        if (sessionReady && backStack.value?.destination?.route == "bootstrap") {
+            val prefs = context.getSharedPreferences("pop_mind", android.content.Context.MODE_PRIVATE)
+            val destination = if (sessionState.isActive) "session" else if (prefs.getBoolean("welcome_done", false)) "focus" else "welcome"
+            if (sessionState.isActive) ContextCompat.startForegroundService(context, Intent(context, FocusSessionService::class.java).setAction(FocusSessionService.ACTION_RESTORE))
+            navController.navigate(destination) { popUpTo("bootstrap") { inclusive = true } }
+        }
+    }
+
+    LaunchedEffect(navController) {
+        FocusSessionRepository.openRequests.collect {
+            navController.navigate("session") { launchSingleTop = true }
+        }
     }
 
     val dndSettings = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -92,8 +130,8 @@ fun PopMindNavigation(progressViewModel: ProgressViewModel, profileViewModel: Pr
         roadmapViewModel.refreshUsage()
     }
 
-    fun requestToStart(task: String, pomodoro: Boolean, music: Boolean) {
-        val config = SessionConfig(task, pomodoro, music)
+    fun requestToStart(task: String, pomodoro: Boolean, focusMinutes: Int, breakMinutes: Int, sound: String, volume: Float) {
+        val config = SessionConfig(task, pomodoro, focusMinutes, breakMinutes, sound, volume)
         pendingSession = config
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             showNotificationDialog = true
@@ -153,30 +191,69 @@ fun PopMindNavigation(progressViewModel: ProgressViewModel, profileViewModel: Pr
         )
     }
 
+    if (showPinDialog) AlertDialog(
+        onDismissRequest = { showPinDialog = false; pendingSession = null },
+        title = { Text("Ghim màn hình trong phiên?") },
+        text = { Text("Ghim giúp bạn ở lại POP-MIND. Android sẽ hỏi xác nhận khi bật lần đầu; bạn có thể bỏ ghim bằng thao tác hệ thống bất cứ lúc nào.") },
+        confirmButton = { TextButton(onClick = {
+            showPinDialog = false
+            pendingSession?.let { launchSession(it, pendingTryDnd, true) }
+            pendingSession = null
+        }) { Text("Ghim và bắt đầu") } },
+        dismissButton = { TextButton(onClick = {
+            showPinDialog = false
+            pendingSession?.let { launchSession(it, pendingTryDnd, false) }
+            pendingSession = null
+        }) { Text("Không ghim") } }
+    )
+
     val currentRoute = backStack.value?.destination?.route
     val showTabs = tabs.any { it.route == currentRoute }
     Scaffold(
         bottomBar = {
-            if (showTabs) NavigationBar {
+            if (showTabs) NavigationBar(
+                modifier = Modifier.heightIn(min = 80.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp
+            ) {
                 tabs.forEach { tab ->
                     val selected = backStack.value?.destination?.hierarchy?.any { it.route == tab.route } == true
                     NavigationBarItem(
                         selected = selected,
                         onClick = { navController.navigate(tab.route) { launchSingleTop = true; restoreState = true; popUpTo(navController.graph.startDestinationId) { saveState = true } } },
                         icon = { Icon(tab.icon, contentDescription = tab.title) },
-                        label = { Text(tab.title) }
+                        label = { Text(tab.title, style = MaterialTheme.typography.labelMedium) },
+                        colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = Mint,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }
         }
     ) { padding ->
-        NavHost(navController, startDestination = if (welcomeDone) "focus" else "welcome", modifier = androidx.compose.ui.Modifier.padding(padding)) {
+        NavHost(navController, startDestination = "bootstrap", modifier = androidx.compose.ui.Modifier.padding(padding)) {
+            composable("bootstrap") { androidx.compose.foundation.layout.Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() } }
             composable("welcome") { WelcomeScreen {
                 context.getSharedPreferences("pop_mind", android.content.Context.MODE_PRIVATE).edit().putBoolean("welcome_done", true).apply()
                 navController.navigate("focus") { popUpTo("welcome") { inclusive = true } }
             } }
-            composable("focus") { FocusScreen(::requestToStart) }
-            composable("progress") { ProgressScreen(progressViewModel) }
+            composable("focus") {
+                FocusScreen(
+                    progressState = progressViewModel.state.collectAsState().value,
+                    settings = focusSettings,
+                    onFocusMinutes = focusSettingsViewModel::saveFocus,
+                    onBreakMinutes = focusSettingsViewModel::saveBreak,
+                    onSound = focusSettingsViewModel::saveSound,
+                    onVolume = focusSettingsViewModel::saveVolume,
+                    onStartSession = ::requestToStart,
+                    onOpenBreathing = { navController.navigate("breathing") }
+                )
+            }
+            composable("progress") { ProgressScreen(progressViewModel, profileViewModel, onRequestUsageAccess = { usageAccessSettings.launch(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }) }
             composable("roadmap") {
                 PersonalizedRoadmapScreen(
                     roadmapViewModel,
@@ -187,6 +264,7 @@ fun PopMindNavigation(progressViewModel: ProgressViewModel, profileViewModel: Pr
             composable("profile") {
                 ProfileScreen(
                     profileViewModel = profileViewModel,
+                    progressState = progressViewModel.state.collectAsState().value,
                     onLoadSample = progressViewModel::loadDemoWeek,
                     onDeleteAll = { progressViewModel.deleteAll() },
                     onOpenAssessment = { navController.navigate("assessment") },
@@ -198,16 +276,14 @@ fun PopMindNavigation(progressViewModel: ProgressViewModel, profileViewModel: Pr
                 AssessmentScreen(profileViewModel, onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() })
             }
             composable("plus") { PlusScreen(onBack = { navController.popBackStack() }) }
+            composable("breathing") { BreathingScreen(onExit = { navController.popBackStack() }) }
             composable("session") {
                 SessionScreen(
-                    onFinished = { duration, interruptions ->
-                        navController.navigate("summary/$duration/$interruptions") {
-                            popUpTo("session") { inclusive = true }
-                            launchSingleTop = true
-                        }
-                    },
-                    onAbandoned = {
-                        navController.popBackStack("focus", inclusive = false)
+                    onVolumeChanged = focusSettingsViewModel::saveVolume,
+                    onFinished = { duration, interruptions, completed ->
+                        if (completed) navController.navigate("summary/$duration/$interruptions") {
+                            popUpTo("session") { inclusive = true }; launchSingleTop = true
+                        } else navController.navigate("focus") { popUpTo("session") { inclusive = true } }
                     }
                 )
             }
