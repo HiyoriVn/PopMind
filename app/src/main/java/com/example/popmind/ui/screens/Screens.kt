@@ -27,7 +27,7 @@ import com.example.popmind.ui.theme.OrangePale
 import com.example.popmind.ui.theme.TealPale
 
 @Composable
-fun FocusScreen() {
+fun FocusScreen(onStartSession: (String, Boolean, Boolean) -> Unit) {
     var task by remember { mutableStateOf("") }
     var pomodoro by remember { mutableStateOf(true) }
     var music by remember { mutableStateOf(false) }
@@ -53,7 +53,7 @@ fun FocusScreen() {
         Spacer(Modifier.height(12.dp))
         OptionCard(title = "Nhạc nền", subtitle = "Một chút âm thanh dịu nhẹ", checked = music, onCheckedChange = { music = it }, icon = "🎧")
         Spacer(Modifier.height(24.dp))
-        Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(60.dp), shape = RoundedCornerShape(20.dp)) {
+        Button(onClick = { onStartSession(task, pomodoro, music) }, modifier = Modifier.fillMaxWidth().height(60.dp), shape = RoundedCornerShape(20.dp)) {
             Text("Bắt đầu tập trung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(8.dp)); Text("→", fontSize = 22.sp)
         }
