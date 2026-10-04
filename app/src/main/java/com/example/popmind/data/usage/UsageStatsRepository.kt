@@ -7,7 +7,9 @@ import android.content.pm.PackageManager
 import android.os.Process
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import com.example.popmind.data.PersonalizationStore
 
 data class AppUsage(val packageName: String, val label: String, val foregroundMillis: Long)
 data class UsageSummary(
@@ -20,10 +22,7 @@ data class UsageSummary(
 
 class UsageStatsRepository(context: Context) {
     private val app = context.applicationContext
-    private val shortPackages = setOf(
-        "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", "com.google.android.youtube",
-        "com.facebook.katana", "com.instagram.android"
-    )
+    private val personalizationStore = PersonalizationStore(app as android.app.Application)
 
     fun hasAccess(): Boolean = try {
         val ops = app.getSystemService(AppOpsManager::class.java)
@@ -38,6 +37,7 @@ class UsageStatsRepository(context: Context) {
     suspend fun readRange(start: Long, end: Long): UsageSummary = withContext(Dispatchers.IO) {
         if (!hasAccess()) return@withContext UsageSummary()
         try {
+            val linkedPackages = personalizationStore.profile.first().linkedApps
             val stats = app.getSystemService(UsageStatsManager::class.java)
                 .queryAndAggregateUsageStats(start, end).orEmpty()
             val entries = stats.mapNotNull { (pkg, stat) ->
@@ -48,14 +48,14 @@ class UsageStatsRepository(context: Context) {
                 } catch (_: PackageManager.NameNotFoundException) { pkg }
                 AppUsage(pkg, label, millis)
             }
-            val shortByHour = readShortContentByHour(start, end)
-            UsageSummary(true, false, entries.filter { it.packageName in shortPackages }.sumOf { it.foregroundMillis },
+            val shortByHour = readShortContentByHour(start, end, linkedPackages)
+            UsageSummary(true, false, entries.filter { it.packageName in linkedPackages }.sumOf { it.foregroundMillis },
                 entries.sortedByDescending { it.foregroundMillis }.take(5), shortByHour)
         } catch (_: SecurityException) { UsageSummary() }
     }
 
     // Ước lượng phân bổ theo giờ từ các mốc app vào/ra foreground trong tuần.
-    private fun readShortContentByHour(start: Long, end: Long): Map<Int, Long> {
+    private fun readShortContentByHour(start: Long, end: Long, linkedPackages: Set<String>): Map<Int, Long> {
         val manager = app.getSystemService(UsageStatsManager::class.java)
         val events = manager.queryEvents(start, end)
         val event = android.app.usage.UsageEvents.Event()
@@ -69,16 +69,16 @@ class UsageStatsRepository(context: Context) {
             val background = event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND ||
                 (Build.VERSION.SDK_INT >= 29 && event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED)
             if (foreground) {
-                if (activePackage?.let(shortPackages::contains) == true && event.timeStamp > activeSince) addInterval(totals, activeSince, event.timeStamp)
+                if (activePackage?.let(linkedPackages::contains) == true && event.timeStamp > activeSince) addInterval(totals, activeSince, event.timeStamp)
                 activePackage = event.packageName
                 activeSince = event.timeStamp
             } else if (background && event.packageName == activePackage) {
-                if (activePackage?.let(shortPackages::contains) == true && event.timeStamp > activeSince) addInterval(totals, activeSince, event.timeStamp)
+                if (activePackage?.let(linkedPackages::contains) == true && event.timeStamp > activeSince) addInterval(totals, activeSince, event.timeStamp)
                 activePackage = null
                 activeSince = 0L
             }
         }
-        if (activePackage?.let(shortPackages::contains) == true && end > activeSince) addInterval(totals, activeSince, end)
+        if (activePackage?.let(linkedPackages::contains) == true && end > activeSince) addInterval(totals, activeSince, end)
         val result: MutableMap<Int, Long> = linkedMapOf()
         for (index in totals.indices) {
             val hour: Int = index

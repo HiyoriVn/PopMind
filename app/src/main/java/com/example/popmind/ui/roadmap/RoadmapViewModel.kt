@@ -39,7 +39,7 @@ object RoadmapEngine {
         val avgInterruptions = if (recent.isEmpty()) 0.0 else recent.map { it.interruptions }.average()
         val perDay = usage.shortContentMillis / 7.0 / 3_600_000.0
         val candidates = mutableListOf<RoadmapGoalEntity>()
-        val chosenEntertainment = usage.topApps.firstOrNull { it.packageName in profile.favoriteApps }
+        val chosenEntertainment = usage.topApps.firstOrNull { it.packageName in profile.linkedApps }
         if (usage.hasAccess && perDay > 2.0) candidates += RoadmapGoalEntity("screen", weekStart, "Giảm 20 phút/ngày", "Nội dung ngắn chiếm khoảng ${"%.1f".format(java.util.Locale.US, perDay)} giờ mỗi ngày trong 7 ngày qua${chosenEntertainment?.let { "; ${it.label} là app bạn đã chọn" }.orEmpty()}.", "Thay 20 phút lướt màn hình bằng đọc sách hoặc đi bộ nhẹ.")
         if (avgInterruptions > 2.0) {
             val commonHour = recent.filter { it.interruptions > 0 }.groupingBy { java.time.Instant.ofEpochMilli(it.startTime).atZone(ZoneId.systemDefault()).hour }.eachCount().maxByOrNull { it.value }

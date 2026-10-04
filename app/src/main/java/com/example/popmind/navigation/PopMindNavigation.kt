@@ -302,7 +302,7 @@ fun PopMindNavigation(progressViewModel: ProgressViewModel, profileViewModel: Pr
                     profileViewModel = profileViewModel,
                     progressState = progressState,
                     personalization = personalization.profile,
-                    favoriteAppLabels = personalization.installedApps.filter { it.packageName in personalization.profile.favoriteApps }.map { it.label },
+                    favoriteAppLabels = personalization.installedApps.filter { it.packageName in personalization.profile.linkedApps }.map { it.label },
                     onLoadSample = progressViewModel::loadDemoWeek,
                     onDeleteAll = { progressViewModel.deleteAll() },
                     onOpenAssessment = { navController.navigate("assessment") },
